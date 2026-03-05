@@ -1,0 +1,20 @@
+.model-select {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  background: #2a2a4a;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.model-select:focus {
+  outline: none;
+  border-color: #7c7cff;
+}
+
+.model-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
