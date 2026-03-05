@@ -30,3 +30,13 @@
   color: #ef5350;
   font-size: 0.85rem;
 }
+
+.cache-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  opacity: 0.6;
+}
+
+.cache-btn:hover:not(:disabled) {
+  opacity: 1;
+}

@@ -16,6 +16,8 @@ interface LLMChatProps {
   streamingText: string;
   onSelectModel: (modelId: string) => void;
   onLoadModel: () => void;
+  onUnloadModel: () => void;
+  onClearCache: () => void;
 }
 
 export function LLMChat({
@@ -28,6 +30,8 @@ export function LLMChat({
   streamingText,
   onSelectModel,
   onLoadModel,
+  onUnloadModel,
+  onClearCache,
 }: LLMChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -61,15 +65,26 @@ export function LLMChat({
           <ProgressBar progress={loadProgress} label={`Loading model... ${loadProgress}%`} />
         )}
         {status === "ready" && (
-          <span className="status-badge ready">
-            {AVAILABLE_MODELS.find((m) => m.id === activeModel)?.label ?? "Model"} Ready
-          </span>
+          <>
+            <span className="status-badge ready">
+              {AVAILABLE_MODELS.find((m) => m.id === activeModel)?.label ?? "Model"} Ready
+            </span>
+            <button className="btn danger" onClick={onUnloadModel}>
+              Unload
+            </button>
+          </>
         )}
         {status === "generating" && (
           <span className="status-badge generating">Generating...</span>
         )}
         {status === "error" && (
           <span className="error">{error}</span>
+        )}
+
+        {(status === "idle" || status === "ready" || status === "error") && (
+          <button className="btn cache-btn" onClick={onClearCache} title="Delete all cached model weights from disk">
+            Clear Cache
+          </button>
         )}
       </div>
 
