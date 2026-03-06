@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { CreateMLCEngine, MLCEngine } from "@mlc-ai/web-llm";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { CreateMLCEngine, MLCEngine, deleteModelAllInfoInCache, hasModelInCache } from "@mlc-ai/web-llm";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "generating" | "error";
 
@@ -29,6 +29,48 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC-1k", label: "Llama 3.1 8B (1k ctx)", size: "~4.5GB" },
 ];
 
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TIMESTAMPS_KEY = "cerebus-model-cache-timestamps";
+
+function getCacheTimestamps(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_TIMESTAMPS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function setCacheTimestamp(modelId: string) {
+  const timestamps = getCacheTimestamps();
+  timestamps[modelId] = Date.now();
+  localStorage.setItem(CACHE_TIMESTAMPS_KEY, JSON.stringify(timestamps));
+}
+
+function removeCacheTimestamp(modelId: string) {
+  const timestamps = getCacheTimestamps();
+  delete timestamps[modelId];
+  localStorage.setItem(CACHE_TIMESTAMPS_KEY, JSON.stringify(timestamps));
+}
+
+function clearAllCacheTimestamps() {
+  localStorage.removeItem(CACHE_TIMESTAMPS_KEY);
+}
+
+async function evictExpiredModels() {
+  const timestamps = getCacheTimestamps();
+  const now = Date.now();
+
+  for (const [modelId, lastUsed] of Object.entries(timestamps)) {
+    if (now - lastUsed > CACHE_TTL_MS) {
+      const inCache = await hasModelInCache(modelId);
+      if (inCache) {
+        await deleteModelAllInfoInCache(modelId);
+      }
+      removeCacheTimestamp(modelId);
+    }
+  }
+}
+
 export function useWebLLM() {
   const [status, setStatus] = useState<ModelStatus>("idle");
   const [loadProgress, setLoadProgress] = useState(0);
@@ -36,11 +78,28 @@ export function useWebLLM() {
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const engineRef = useRef<MLCEngine | null>(null);
 
+  // Evict expired models on mount
+  useEffect(() => {
+    evictExpiredModels();
+  }, []);
+
   const loadModel = useCallback(async (modelId: string) => {
     try {
       if (engineRef.current) {
         engineRef.current.unload();
         engineRef.current = null;
+      }
+
+      // Clear any previously cached model before loading the new one
+      const timestamps = getCacheTimestamps();
+      for (const cachedId of Object.keys(timestamps)) {
+        if (cachedId !== modelId) {
+          const inCache = await hasModelInCache(cachedId);
+          if (inCache) {
+            await deleteModelAllInfoInCache(cachedId);
+          }
+          removeCacheTimestamp(cachedId);
+        }
       }
 
       setStatus("loading");
@@ -55,6 +114,7 @@ export function useWebLLM() {
       });
 
       engineRef.current = engine;
+      setCacheTimestamp(modelId);
       setStatus("ready");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -86,6 +146,11 @@ export function useWebLLM() {
           onChunk?.(result);
         }
 
+        // Renew cache TTL on use
+        if (activeModel) {
+          setCacheTimestamp(activeModel);
+        }
+
         setStatus("ready");
         return result;
       } catch (err) {
@@ -94,8 +159,33 @@ export function useWebLLM() {
         throw err;
       }
     },
-    []
+    [activeModel]
   );
 
-  return { status, loadProgress, error, activeModel, loadModel, generate };
+  const unloadModel = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.unload();
+      engineRef.current = null;
+    }
+    setStatus("idle");
+    setActiveModel(null);
+    setError(null);
+  }, []);
+
+  const clearCache = useCallback(async (modelId?: string) => {
+    if (modelId) {
+      await deleteModelAllInfoInCache(modelId);
+      removeCacheTimestamp(modelId);
+    } else {
+      for (const model of AVAILABLE_MODELS) {
+        const inCache = await hasModelInCache(model.id);
+        if (inCache) {
+          await deleteModelAllInfoInCache(model.id);
+        }
+      }
+      clearAllCacheTimestamps();
+    }
+  }, []);
+
+  return { status, loadProgress, error, activeModel, loadModel, unloadModel, clearCache, generate };
 }

@@ -13,7 +13,7 @@ import { PendingBanner } from "./components/PeerChat/PendingBanner";
 import "./App.css";
 
 function App() {
-  const { status, loadProgress, error, activeModel, loadModel, generate } = useWebLLM();
+  const { status, loadProgress, error, activeModel, loadModel, unloadModel, clearCache, generate } = useWebLLM();
   const {
     peerId,
     connected,
@@ -155,6 +155,11 @@ function App() {
             streamingText={streamingText}
             onSelectModel={setSelectedModel}
             onLoadModel={() => loadModel(selectedModel)}
+            onUnloadModel={unloadModel}
+            onClearCache={async () => {
+              unloadModel();
+              await clearCache();
+            }}
           />
         )}
 
