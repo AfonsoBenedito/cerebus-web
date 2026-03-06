@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useWebLLM, AVAILABLE_MODELS } from "./hooks/useWebLLM";
+import { useWebLLM, useGPUMemory } from "./hooks/useWebLLM";
 import type { ChatMessage } from "./hooks/useWebLLM";
 import { usePeer } from "./hooks/usePeer";
 import type { PeerMessage } from "./hooks/usePeer";
@@ -27,12 +27,24 @@ function App() {
     disconnect,
   } = usePeer();
   const agent = useAgent();
+  const { availableModels } = useGPUMemory();
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streamingText, setStreamingText] = useState("");
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[1].id);
+  const [selectedModel, setSelectedModel] = useState("");
   const [remotePeerId, setRemotePeerId] = useState("");
+
+  // Set default model once GPU memory detection completes
+  useEffect(() => {
+    if (availableModels.length > 0 && !selectedModel) {
+      setSelectedModel(availableModels[0].id);
+    }
+    // If current selection got filtered out, pick the first available
+    if (selectedModel && availableModels.length > 0 && !availableModels.some((m) => m.id === selectedModel)) {
+      setSelectedModel(availableModels[0].id);
+    }
+  }, [availableModels, selectedModel]);
   const [username, setUsername] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("peer");
   const [pendingRequest, setPendingRequest] = useState<string | null>(null);
@@ -201,6 +213,7 @@ function App() {
             error={error}
             activeModel={activeModel}
             selectedModel={selectedModel}
+            availableModels={availableModels}
             chatHistory={chatHistory}
             streamingText={streamingText}
             onSelectModel={setSelectedModel}
@@ -243,6 +256,7 @@ function App() {
       {showPendingBanner && (
         <PendingBanner
           selectedModel={selectedModel}
+          availableModels={availableModels}
           loadProgress={loadProgress}
           isLoading={status === "loading"}
           onSelectModel={setSelectedModel}
