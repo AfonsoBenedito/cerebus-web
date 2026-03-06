@@ -1,9 +1,11 @@
+import type { ModelOption } from "../../hooks/useWebLLM";
 import { ModelSelector } from "../common/ModelSelector";
 import { ProgressBar } from "../common/ProgressBar";
 import "./PendingBanner.css";
 
 interface PendingBannerProps {
   selectedModel: string;
+  availableModels: ModelOption[];
   loadProgress: number;
   isLoading: boolean;
   onSelectModel: (modelId: string) => void;
@@ -13,6 +15,7 @@ interface PendingBannerProps {
 
 export function PendingBanner({
   selectedModel,
+  availableModels,
   loadProgress,
   isLoading,
   onSelectModel,
@@ -32,7 +35,7 @@ export function PendingBanner({
     <div className="pending-banner">
       <p>A peer sent an agent request. Load a model to respond.</p>
       <div className="pending-actions">
-        <ModelSelector value={selectedModel} onChange={onSelectModel} />
+        <ModelSelector value={selectedModel} models={availableModels} onChange={onSelectModel} />
         <button className="btn primary" onClick={onLoadModel}>
           Load Model
         </button>

@@ -1,6 +1,5 @@
 import { useRef, useEffect } from "react";
-import { AVAILABLE_MODELS } from "../../hooks/useWebLLM";
-import type { ModelStatus, ChatMessage } from "../../hooks/useWebLLM";
+import type { ModelStatus, ChatMessage, ModelOption } from "../../hooks/useWebLLM";
 import { ModelSelector } from "../common/ModelSelector";
 import { ProgressBar } from "../common/ProgressBar";
 import { MessageBubble } from "../common/MessageBubble";
@@ -12,6 +11,7 @@ interface LLMChatProps {
   error: string | null;
   activeModel: string | null;
   selectedModel: string;
+  availableModels: ModelOption[];
   chatHistory: ChatMessage[];
   streamingText: string;
   onSelectModel: (modelId: string) => void;
@@ -26,6 +26,7 @@ export function LLMChat({
   error,
   activeModel,
   selectedModel,
+  availableModels,
   chatHistory,
   streamingText,
   onSelectModel,
@@ -51,6 +52,7 @@ export function LLMChat({
       <div className="model-controls">
         <ModelSelector
           value={selectedModel}
+          models={availableModels}
           onChange={onSelectModel}
           disabled={status === "loading" || status === "generating"}
         />
@@ -67,7 +69,7 @@ export function LLMChat({
         {status === "ready" && (
           <>
             <span className="status-badge ready">
-              {AVAILABLE_MODELS.find((m) => m.id === activeModel)?.label ?? "Model"} Ready
+              {availableModels.find((m) => m.id === activeModel)?.label ?? "Model"} Ready
             </span>
             <button className="btn danger" onClick={onUnloadModel}>
               Unload
