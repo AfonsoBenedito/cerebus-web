@@ -3,7 +3,7 @@ import Peer from "peerjs";
 import type { DataConnection } from "peerjs";
 
 export interface PeerMessage {
-  type: "chat" | "llm-request" | "llm-response" | "llm-loading" | "system";
+  type: "chat" | "llm-request" | "llm-response" | "llm-loading" | "llm-thinking" | "system";
   payload: string;
   sender: string;
   timestamp: number;
@@ -60,7 +60,8 @@ export function usePeer() {
   const initialize = useCallback((username: string) => {
     if (peerRef.current) return;
 
-    const peer = new Peer(username, {
+    const sanitized = username.trim().toUpperCase().replace(/\s+/g, "");
+    const peer = new Peer(sanitized, {
       config: {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -97,7 +98,8 @@ export function usePeer() {
       const peer = peerRef.current;
       if (!peer) return;
 
-      const conn = peer.connect(remotePeerId);
+      const sanitized = remotePeerId.trim().toUpperCase().replace(/\s+/g, "");
+      const conn = peer.connect(sanitized);
       setupConnection(conn);
     },
     [setupConnection]
