@@ -51,3 +51,65 @@
   outline: none;
   border-color: #7c7cff;
 }
+
+.agent-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.agent-step {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+}
+
+.agent-step--thinking {
+  background: #2a2a4a66;
+  border-left: 2px solid #bb86fc;
+}
+
+.agent-step--answer {
+  background: #1a3a2a66;
+  border-left: 2px solid #4caf50;
+}
+
+.agent-step--tool_call {
+  background: #2a2a3a66;
+  border-left: 2px solid #ff9800;
+}
+
+.agent-step--tool_result {
+  background: #2a3a3a66;
+  border-left: 2px solid #00bcd4;
+  font-family: monospace;
+}
+
+.agent-step-label {
+  font-weight: 600;
+  min-width: 55px;
+  color: #888;
+}
+
+.agent-step--thinking .agent-step-label { color: #bb86fc; }
+.agent-step--answer .agent-step-label { color: #4caf50; }
+.agent-step--tool_call .agent-step-label { color: #ff9800; }
+.agent-step--tool_result .agent-step-label { color: #00bcd4; }
+
+.agent-step-content {
+  color: #ccc;
+  word-break: break-word;
+}
+
+.agent-step-dots {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
