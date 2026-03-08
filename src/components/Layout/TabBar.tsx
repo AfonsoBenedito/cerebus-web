@@ -1,6 +1,6 @@
 import "./TabBar.css";
 
-export type Tab = "llm" | "peer";
+export type Tab = "agents" | "tasks" | "llm" | "peer";
 
 interface TabBarProps {
   activeTab: Tab;
@@ -11,6 +11,18 @@ interface TabBarProps {
 export function TabBar({ activeTab, onTabChange, peerConnected }: TabBarProps) {
   return (
     <div className="tabs">
+      <button
+        className={`tab ${activeTab === "agents" ? "active" : ""}`}
+        onClick={() => onTabChange("agents")}
+      >
+        Agents
+      </button>
+      <button
+        className={`tab ${activeTab === "tasks" ? "active" : ""}`}
+        onClick={() => onTabChange("tasks")}
+      >
+        Tasks
+      </button>
       <button
         className={`tab ${activeTab === "peer" ? "active" : ""}`}
         onClick={() => onTabChange("peer")}

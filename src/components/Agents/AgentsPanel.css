@@ -1,0 +1,157 @@
+.agents-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.agents-header h2 {
+  font-size: 1.1rem;
+  color: #e0e0e0;
+}
+
+.agents-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.agent-form {
+  padding: 1rem;
+  border-bottom: 1px solid #2a2a4a;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #1e1e36;
+}
+
+.agent-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.agent-form-field label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-form-field input[type="text"],
+.agent-form-field textarea {
+  padding: 0.5rem 0.75rem;
+  background: #2a2a4a;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.agent-form-field input[type="text"]:focus,
+.agent-form-field textarea:focus {
+  outline: none;
+  border-color: #7c7cff;
+}
+
+.agent-form-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+.agent-form-toggle label {
+  margin: 0;
+}
+
+.agent-form-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #7c7cff;
+}
+
+.agent-form-hint {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.agent-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.agents-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 0.9rem;
+  padding: 2rem;
+}
+
+.agents-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.agent-card {
+  background: #22223a;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agent-card-name {
+  font-weight: 600;
+  color: #bb86fc;
+  font-size: 1rem;
+}
+
+.agent-card-badge {
+  background: #7c7cff33;
+  color: #7c7cff;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-card-prompt {
+  font-size: 0.85rem;
+  color: #999;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  max-height: 4.2em;
+  overflow: hidden;
+}
+
+.agent-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}

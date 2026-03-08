@@ -87,6 +87,77 @@ function parseToolCall(content: string): { name: string; args: string } | null {
   };
 }
 
+/**
+ * Standalone runner: executes a task using any agent config.
+ * Works for both simple and autonomous modes.
+ */
+export async function runAgentTask(
+  agentConfig: { systemPrompt: string; autonomous: boolean },
+  prompt: string,
+  generate: (messages: ChatMessage[], onChunk?: (text: string) => void) => Promise<string>,
+  options?: {
+    onChunk?: (text: string) => void;
+    onStep?: (step: AgentStep) => void;
+    toolContext?: ToolContext;
+  }
+): Promise<string> {
+  if (!agentConfig.autonomous) {
+    // Simple mode: system prompt + user prompt, single generation
+    const messages: ChatMessage[] = [
+      { role: "system", content: agentConfig.systemPrompt },
+      { role: "user", content: prompt },
+    ];
+    return generate(messages, options?.onChunk);
+  }
+
+  // Autonomous mode: multi-step reasoning loop
+  const systemContent = agentConfig.systemPrompt + AUTONOMOUS_INSTRUCTIONS;
+  const systemMsg: ChatMessage = { role: "system", content: systemContent };
+  const history: ChatMessage[] = [{ role: "user", content: prompt }];
+
+  for (let i = 0; i < MAX_REASONING_STEPS; i++) {
+    const messages: ChatMessage[] = [systemMsg, ...history];
+    const response = await generate(messages, i === 0 ? options?.onChunk : undefined);
+    const step = parseStep(response);
+
+    options?.onStep?.(step);
+    history.push({ role: "assistant", content: response });
+
+    if (step.type === "answer") {
+      return step.content;
+    }
+
+    if (step.type === "tool_call") {
+      const parsed = parseToolCall(step.content);
+      let result: string;
+      if (parsed) {
+        result = await executeTool(parsed.name, parsed.args, options?.toolContext ?? {});
+      } else {
+        result = "Error: Could not parse tool call.";
+      }
+
+      const resultStep: AgentStep = { type: "tool_result", content: result };
+      options?.onStep?.(resultStep);
+
+      history.push({
+        role: "user",
+        content: `[TOOL_RESULT] ${result}\n\nContinue. Use [THINKING] to reason about the result, [TOOL_CALL] to use another tool, or [ANSWER] for the final response.`,
+      });
+      continue;
+    }
+
+    // Thinking step — prompt to continue
+    history.push({
+      role: "user",
+      content: "Continue. Use [THINKING] for more reasoning, [TOOL_CALL] to use a tool, or [ANSWER] for the final response.",
+    });
+  }
+
+  // Max steps reached — return last content
+  const lastMsg = history[history.length - 1];
+  return lastMsg?.content ?? "I was unable to reach a conclusion.";
+}
+
 export function useAgent() {
   const [config, setConfig] = useState<AgentConfig>(loadConfig);
   const [steps, setSteps] = useState<AgentStep[]>([]);
