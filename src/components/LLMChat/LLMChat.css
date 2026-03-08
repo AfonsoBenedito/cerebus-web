@@ -32,11 +32,66 @@
 }
 
 .cache-btn {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  opacity: 0.6;
+  font-size: 0.7rem !important;
+  padding: 0.2rem 0.5rem !important;
 }
 
-.cache-btn:hover:not(:disabled) {
-  opacity: 1;
+/* Cached models */
+
+.cached-models {
+  border-bottom: 1px solid #2a2a4a;
+  padding: 0.5rem 1rem;
+}
+
+.cached-models-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.cached-models-title {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cached-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cached-model-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  background: #22223a;
+  font-size: 0.8rem;
+}
+
+.cached-model-item.active {
+  border-left: 2px solid #4caf50;
+}
+
+.cached-model-name {
+  color: #e0e0e0;
+  flex: 1;
+}
+
+.cached-model-size {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.cached-model-badge {
+  background: #1b5e20;
+  color: #4caf50;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 8px;
+  text-transform: uppercase;
 }
