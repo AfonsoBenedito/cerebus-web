@@ -1,7 +1,12 @@
 .header {
-  padding: 1rem;
-  text-align: center;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid #2a2a4a;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .header h1 {
@@ -12,5 +17,33 @@
 .subtitle {
   font-size: 0.8rem;
   color: #888;
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
+}
+
+.header-fs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fs-linked {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #4caf50;
+  font-family: monospace;
+}
+
+.fs-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4caf50;
+  flex-shrink: 0;
+}
+
+.fs-btn {
+  font-size: 0.75rem !important;
+  padding: 0.3rem 0.6rem !important;
 }

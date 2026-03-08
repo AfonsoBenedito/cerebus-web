@@ -7,8 +7,6 @@ interface AgentsPanelProps {
   onCreate: (name: string, systemPrompt: string, autonomous: boolean) => void;
   onUpdate: (id: string, updates: Partial<Omit<Agent, "id" | "createdAt">>) => void;
   onDelete: (id: string) => void;
-  onSaveToFile: (agent: Agent) => void;
-  onLoadFromFile: () => void;
 }
 
 export function AgentsPanel({
@@ -16,8 +14,6 @@ export function AgentsPanel({
   onCreate,
   onUpdate,
   onDelete,
-  onSaveToFile,
-  onLoadFromFile,
 }: AgentsPanelProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,14 +51,9 @@ export function AgentsPanel({
     <div className="agents-panel">
       <div className="agents-header">
         <h2>Agents</h2>
-        <div className="agents-header-actions">
-          <button className="btn" onClick={onLoadFromFile}>
-            Import from File
-          </button>
-          <button className="btn primary" onClick={() => { resetForm(); setShowForm(true); }}>
-            New Agent
-          </button>
-        </div>
+        <button className="btn primary" onClick={() => { resetForm(); setShowForm(true); }}>
+          New Agent
+        </button>
       </div>
 
       {showForm && (
@@ -114,7 +105,7 @@ export function AgentsPanel({
 
       {agents.length === 0 && !showForm && (
         <div className="agents-empty">
-          <p>No agents yet. Create one or import from a file.</p>
+          <p>No agents yet. Create one to get started.</p>
         </div>
       )}
 
@@ -129,9 +120,6 @@ export function AgentsPanel({
             <div className="agent-card-actions">
               <button className="btn" onClick={() => handleEdit(agent)}>
                 Edit
-              </button>
-              <button className="btn" onClick={() => onSaveToFile(agent)}>
-                Save to File
               </button>
               <button className="btn danger" onClick={() => onDelete(agent.id)}>
                 Delete
