@@ -1,6 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-
-const STORAGE_KEY = "cerebus-tasks";
+import { useState, useCallback } from "react";
+import { generateId } from "../utils/id";
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed";
 
@@ -14,30 +13,8 @@ export interface Task {
   createdAt: number;
 }
 
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
-function loadTasks(): Task[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-function persistTasks(tasks: Task[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-}
-
 export function useTasks() {
-  const [tasks, setTasks] = useState<Task[]>(loadTasks);
-
-  useEffect(() => {
-    persistTasks(tasks);
-  }, [tasks]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   const createTask = useCallback((title: string, description: string, agentId: string): Task => {
     const task: Task = {
@@ -60,10 +37,15 @@ export function useTasks() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const replaceAll = useCallback((newTasks: Task[]) => {
+    setTasks(newTasks);
+  }, []);
+
   return {
     tasks,
     createTask,
     updateTask,
     deleteTask,
+    replaceAll,
   };
 }

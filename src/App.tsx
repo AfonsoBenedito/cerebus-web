@@ -1,12 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWebLLM, useGPUMemory } from "./hooks/useWebLLM";
 import type { ChatMessage } from "./hooks/useWebLLM";
 import { usePeer } from "./hooks/usePeer";
 import type { PeerMessage } from "./hooks/usePeer";
 import { useAgent, runAgentTask } from "./hooks/useAgent";
+import type { AgentConfig } from "./hooks/useAgent";
 import type { ToolContext } from "./hooks/agentTools";
 import { useAgents } from "./hooks/useAgents";
+import type { Agent } from "./hooks/useAgents";
 import { useTasks } from "./hooks/useTasks";
+import type { Task } from "./hooks/useTasks";
+import { useFileSystem } from "./hooks/useFileSystem";
+import type { ModelManifest } from "./hooks/useFileSystem";
 import { Header } from "./components/Layout/Header";
 import { TabBar } from "./components/Layout/TabBar";
 import type { Tab } from "./components/Layout/TabBar";
@@ -14,7 +19,7 @@ import { ChatInput } from "./components/Layout/ChatInput";
 import { LLMChat } from "./components/LLMChat/LLMChat";
 import { PeerChat } from "./components/PeerChat/PeerChat";
 import { PendingBanner } from "./components/PeerChat/PendingBanner";
-import { AgentConfig } from "./components/AgentConfig/AgentConfig";
+import { AgentConfig as AgentConfigPanel } from "./components/AgentConfig/AgentConfig";
 import { AgentsPanel } from "./components/Agents/AgentsPanel";
 import { TasksPanel } from "./components/Tasks/TasksPanel";
 import "./App.css";
@@ -30,10 +35,16 @@ function App() {
     sendMessage,
     disconnect,
   } = usePeer();
-  const agent = useAgent();
   const { availableModels } = useGPUMemory();
-  const { agents, createAgent, updateAgent, deleteAgent, saveToFile, loadFromFile } = useAgents();
-  const { tasks, createTask, updateTask, deleteTask } = useTasks();
+  const { agents, createAgent, updateAgent, deleteAgent, replaceAll: replaceAllAgents } = useAgents();
+  const { tasks, createTask, updateTask, deleteTask, replaceAll: replaceAllTasks } = useTasks();
+  const fs = useFileSystem();
+
+  // Peer agent config — saved to project folder
+  const handleSavePeerConfig = useCallback((config: AgentConfig) => {
+    fs.writeProjectConfig(config);
+  }, [fs.writeProjectConfig]);
+  const agent = useAgent(undefined, handleSavePeerConfig);
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -42,20 +53,142 @@ function App() {
   const [remotePeerId, setRemotePeerId] = useState("");
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [taskStreamingResult, setTaskStreamingResult] = useState("");
+  const [username, setUsername] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("agents");
+  const [pendingRequest, setPendingRequest] = useState<string | null>(null);
 
   // Set default model once GPU memory detection completes
   useEffect(() => {
     if (availableModels.length > 0 && !selectedModel) {
       setSelectedModel(availableModels[0].id);
     }
-    // If current selection got filtered out, pick the first available
     if (selectedModel && availableModels.length > 0 && !availableModels.some((m) => m.id === selectedModel)) {
       setSelectedModel(availableModels[0].id);
     }
   }, [availableModels, selectedModel]);
-  const [username, setUsername] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("agents");
-  const [pendingRequest, setPendingRequest] = useState<string | null>(null);
+
+  // --- File system sync ---
+
+  const skipNextAgentWriteRef = useRef(false);
+  const skipNextTaskWriteRef = useRef(false);
+  const prevAgentsRef = useRef(agents);
+  const prevTasksRef = useRef(tasks);
+
+  // Load everything from FS (agents, tasks, model manifest, peer config)
+  const loadFromFS = useCallback(async () => {
+    const [fsAgents, fsTasks, manifest, peerConfig] = await Promise.all([
+      fs.readAgents<Agent>(),
+      fs.readTasks<Task>(),
+      fs.readModelManifest(),
+      fs.readProjectConfig<AgentConfig>(),
+    ]);
+
+    skipNextAgentWriteRef.current = true;
+    prevAgentsRef.current = fsAgents;
+    replaceAllAgents(fsAgents);
+
+    skipNextTaskWriteRef.current = true;
+    prevTasksRef.current = fsTasks;
+    replaceAllTasks(fsTasks);
+
+    // Restore model selection from manifest
+    if (manifest?.selectedModel) {
+      setSelectedModel(manifest.selectedModel);
+    }
+
+    // Restore peer agent config
+    if (peerConfig) {
+      agent.setFullConfig(peerConfig);
+    }
+  }, [fs.readAgents, fs.readTasks, fs.readModelManifest, fs.readProjectConfig, replaceAllAgents, replaceAllTasks, agent.setFullConfig]);
+
+  // Load from FS when linked
+  useEffect(() => {
+    if (!fs.isLinked) return;
+    loadFromFS();
+  }, [fs.isLinked]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-read from FS on window focus (external edits)
+  useEffect(() => {
+    if (!fs.isLinked) return;
+    const handleFocus = () => {
+      if (fs.isWriteRecent()) return;
+      loadFromFS();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [fs.isLinked, fs.isWriteRecent, loadFromFS]);
+
+  // Write agents to FS on change
+  useEffect(() => {
+    if (!fs.isLinked) return;
+    const prev = prevAgentsRef.current;
+    prevAgentsRef.current = agents;
+
+    if (skipNextAgentWriteRef.current) {
+      skipNextAgentWriteRef.current = false;
+      return;
+    }
+
+    for (const a of agents) {
+      const old = prev.find((o) => o.id === a.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(a)) {
+        fs.writeAgent(a);
+      }
+    }
+    for (const old of prev) {
+      if (!agents.find((a) => a.id === old.id)) {
+        fs.deleteAgentFile(old.id);
+      }
+    }
+  }, [agents, fs.isLinked, fs.writeAgent, fs.deleteAgentFile]);
+
+  // Write tasks to FS on change
+  useEffect(() => {
+    if (!fs.isLinked) return;
+    const prev = prevTasksRef.current;
+    prevTasksRef.current = tasks;
+
+    if (skipNextTaskWriteRef.current) {
+      skipNextTaskWriteRef.current = false;
+      return;
+    }
+
+    for (const t of tasks) {
+      const old = prev.find((o) => o.id === t.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(t)) {
+        fs.writeTask(t);
+      }
+    }
+    for (const old of prev) {
+      if (!tasks.find((t) => t.id === old.id)) {
+        fs.deleteTaskFile(old.id);
+      }
+    }
+  }, [tasks, fs.isLinked, fs.writeTask, fs.deleteTaskFile]);
+
+  // Save model manifest when model selection or active model changes
+  useEffect(() => {
+    if (!fs.isLinked) return;
+    const manifest: ModelManifest = {
+      activeModel,
+      selectedModel: selectedModel || null,
+      lastUsed: Date.now(),
+    };
+    fs.writeModelManifest(manifest);
+  }, [activeModel, selectedModel, fs.isLinked, fs.writeModelManifest]);
+
+  // Clear all state when unlinking
+  const handleUnlink = useCallback(async () => {
+    await fs.unlink();
+    replaceAllAgents([]);
+    replaceAllTasks([]);
+    agent.clearHistory();
+    setChatHistory([]);
+    setStreamingText("");
+    setRunningTaskId(null);
+    setTaskStreamingResult("");
+  }, [fs.unlink, replaceAllAgents, replaceAllTasks, agent.clearHistory]);
 
   // --- Task execution ---
 
@@ -74,7 +207,6 @@ function App() {
     updateTask(taskId, { status: "running", result: undefined });
 
     try {
-      // Load model if not ready
       if (status !== "ready" && status !== "generating") {
         const modelToLoad = selectedModel || availableModels[0]?.id;
         if (!modelToLoad) {
@@ -83,7 +215,6 @@ function App() {
         await loadModel(modelToLoad);
       }
 
-      // Run the task using the agent's full config (system prompt + autonomous mode)
       const result = await runAgentTask(
         { systemPrompt: taskAgent.systemPrompt, autonomous: taskAgent.autonomous },
         task.description,
@@ -173,7 +304,6 @@ function App() {
 
     const sender = peerId || "unknown";
 
-    // Notify the peer that the agent is thinking
     sendMessage({
       type: "llm-thinking",
       payload: "Generating response...",
@@ -186,19 +316,13 @@ function App() {
     if (agent.config.autonomous) {
       const toolContext: ToolContext = {
         sendPeerMessage: (text) => {
-          sendMessage({
-            type: "chat",
-            payload: text,
-            sender,
-            timestamp: Date.now(),
-          });
+          sendMessage({ type: "chat", payload: text, sender, timestamp: Date.now() });
         },
       };
       reply = await agent.runAutonomous(
         prompt,
         (msgs) => generate(msgs),
         (step) => {
-          // Send step updates to the peer
           sendMessage({
             type: "llm-thinking",
             payload: step.type === "thinking"
@@ -220,13 +344,7 @@ function App() {
       agent.addAssistantMessage(reply);
     }
 
-    const responseMsg: PeerMessage = {
-      type: "llm-response",
-      payload: reply,
-      sender,
-      timestamp: Date.now(),
-    };
-    sendMessage(responseMsg);
+    sendMessage({ type: "llm-response", payload: reply, sender, timestamp: Date.now() });
   };
 
   useEffect(() => {
@@ -264,9 +382,48 @@ function App() {
     ? status !== "ready" || !input.trim()
     : !connected || !input.trim();
 
+  // --- Render ---
+
+  // Gate everything behind folder link
+  if (!fs.isLinked) {
+    return (
+      <div className="app">
+        <Header
+          isLinked={false}
+          folderName={null}
+          hasSavedHandle={fs.hasSavedHandle}
+          onPickDirectory={fs.pickDirectory}
+          onReconnect={fs.reconnect}
+          onUnlink={handleUnlink}
+        />
+        <div className="landing">
+          <h2>Welcome to Cerebus</h2>
+          <p>Link a project folder to get started. All your agents, tasks, and model settings will be stored there.</p>
+          <div className="landing-actions">
+            <button className="btn primary" onClick={fs.pickDirectory}>
+              Set Project Folder
+            </button>
+            {fs.hasSavedHandle && (
+              <button className="btn" onClick={fs.reconnect}>
+                Reconnect to Previous Folder
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <Header />
+      <Header
+        isLinked={fs.isLinked}
+        folderName={fs.folderName}
+        hasSavedHandle={fs.hasSavedHandle}
+        onPickDirectory={fs.pickDirectory}
+        onReconnect={fs.reconnect}
+        onUnlink={handleUnlink}
+      />
       <TabBar activeTab={activeTab} onTabChange={setActiveTab} peerConnected={connected} />
 
       <main className="main">
@@ -276,8 +433,6 @@ function App() {
             onCreate={createAgent}
             onUpdate={updateAgent}
             onDelete={deleteAgent}
-            onSaveToFile={saveToFile}
-            onLoadFromFile={loadFromFile}
           />
         )}
 
@@ -322,7 +477,7 @@ function App() {
 
         {activeTab === "peer" && (
           <>
-            <AgentConfig
+            <AgentConfigPanel
               name={agent.config.name}
               systemPrompt={agent.config.systemPrompt}
               autonomous={agent.config.autonomous}

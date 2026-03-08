@@ -3,7 +3,6 @@ import type { ChatMessage } from "./useWebLLM";
 import { buildToolDescriptions, executeTool } from "./agentTools";
 import type { ToolContext } from "./agentTools";
 
-const STORAGE_KEY = "cerebus-agent-config";
 const MAX_REASONING_STEPS = 15;
 
 export interface AgentConfig {
@@ -45,20 +44,6 @@ const DEFAULT_CONFIG: AgentConfig = {
   autonomous: false,
 };
 
-function loadConfig(): AgentConfig {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
-  } catch {
-    // ignore
-  }
-  return DEFAULT_CONFIG;
-}
-
-function saveConfig(config: AgentConfig) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-}
-
 function parseStep(response: string): AgentStep {
   const trimmed = response.trim();
 
@@ -71,12 +56,10 @@ function parseStep(response: string): AgentStep {
   if (trimmed.startsWith("[TOOL_CALL]")) {
     return { type: "tool_call", content: trimmed.slice(11).trim() };
   }
-  // If no tag, treat as final answer
   return { type: "answer", content: trimmed };
 }
 
 function parseToolCall(content: string): { name: string; args: string } | null {
-  // Expected format: "tool_name: arguments"
   const colonIdx = content.indexOf(":");
   if (colonIdx === -1) {
     return { name: content.trim(), args: "" };
@@ -102,7 +85,6 @@ export async function runAgentTask(
   }
 ): Promise<string> {
   if (!agentConfig.autonomous) {
-    // Simple mode: system prompt + user prompt, single generation
     const messages: ChatMessage[] = [
       { role: "system", content: agentConfig.systemPrompt },
       { role: "user", content: prompt },
@@ -110,7 +92,6 @@ export async function runAgentTask(
     return generate(messages, options?.onChunk);
   }
 
-  // Autonomous mode: multi-step reasoning loop
   const systemContent = agentConfig.systemPrompt + AUTONOMOUS_INSTRUCTIONS;
   const systemMsg: ChatMessage = { role: "system", content: systemContent };
   const history: ChatMessage[] = [{ role: "user", content: prompt }];
@@ -146,20 +127,21 @@ export async function runAgentTask(
       continue;
     }
 
-    // Thinking step — prompt to continue
     history.push({
       role: "user",
       content: "Continue. Use [THINKING] for more reasoning, [TOOL_CALL] to use a tool, or [ANSWER] for the final response.",
     });
   }
 
-  // Max steps reached — return last content
   const lastMsg = history[history.length - 1];
   return lastMsg?.content ?? "I was unable to reach a conclusion.";
 }
 
-export function useAgent() {
-  const [config, setConfig] = useState<AgentConfig>(loadConfig);
+export function useAgent(
+  initialConfig?: AgentConfig,
+  onSave?: (config: AgentConfig) => void
+) {
+  const [config, setConfig] = useState<AgentConfig>(initialConfig ?? DEFAULT_CONFIG);
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [isReasoning, setIsReasoning] = useState(false);
   const historyRef = useRef<ChatMessage[]>([]);
@@ -167,9 +149,13 @@ export function useAgent() {
   const updateConfig = useCallback((updates: Partial<AgentConfig>) => {
     setConfig((prev) => {
       const next = { ...prev, ...updates };
-      saveConfig(next);
+      onSave?.(next);
       return next;
     });
+  }, [onSave]);
+
+  const setFullConfig = useCallback((newConfig: AgentConfig) => {
+    setConfig(newConfig);
   }, []);
 
   const buildMessages = useCallback(
@@ -241,7 +227,6 @@ export function useAgent() {
           const resultStep: AgentStep = { type: "tool_result", content: result };
           pushStep(resultStep);
 
-          // Feed tool result back as a user message
           historyRef.current.push({
             role: "user",
             content: `[TOOL_RESULT] ${result}\n\nContinue. Use [THINKING] to reason about the result, [TOOL_CALL] to use another tool, or [ANSWER] for the final response.`,
@@ -249,14 +234,12 @@ export function useAgent() {
           continue;
         }
 
-        // Thinking step — prompt to continue
         historyRef.current.push({
           role: "user",
           content: "Continue. Use [THINKING] for more reasoning, [TOOL_CALL] to use a tool, or [ANSWER] for the final response.",
         });
       }
 
-      // Max steps reached
       setIsReasoning(false);
       const lastStep = accumulatedSteps[accumulatedSteps.length - 1];
       return lastStep?.content ?? "I was unable to reach a conclusion.";
@@ -274,6 +257,7 @@ export function useAgent() {
     steps,
     isReasoning,
     updateConfig,
+    setFullConfig,
     buildMessages,
     addAssistantMessage,
     runAutonomous,
