@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWebLLM, useGPUMemory } from "./hooks/useWebLLM";
 import type { ChatMessage } from "./hooks/useWebLLM";
 import { usePeer } from "./hooks/usePeer";
 import type { PeerMessage } from "./hooks/usePeer";
-import { useAgent } from "./hooks/useAgent";
+import { useAgent, runAgentTask } from "./hooks/useAgent";
 import type { ToolContext } from "./hooks/agentTools";
+import { useAgents } from "./hooks/useAgents";
+import { useTasks } from "./hooks/useTasks";
 import { Header } from "./components/Layout/Header";
 import { TabBar } from "./components/Layout/TabBar";
 import type { Tab } from "./components/Layout/TabBar";
@@ -13,6 +15,8 @@ import { LLMChat } from "./components/LLMChat/LLMChat";
 import { PeerChat } from "./components/PeerChat/PeerChat";
 import { PendingBanner } from "./components/PeerChat/PendingBanner";
 import { AgentConfig } from "./components/AgentConfig/AgentConfig";
+import { AgentsPanel } from "./components/Agents/AgentsPanel";
+import { TasksPanel } from "./components/Tasks/TasksPanel";
 import "./App.css";
 
 function App() {
@@ -28,12 +32,16 @@ function App() {
   } = usePeer();
   const agent = useAgent();
   const { availableModels } = useGPUMemory();
+  const { agents, createAgent, updateAgent, deleteAgent, saveToFile, loadFromFile } = useAgents();
+  const { tasks, createTask, updateTask, deleteTask } = useTasks();
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [remotePeerId, setRemotePeerId] = useState("");
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [taskStreamingResult, setTaskStreamingResult] = useState("");
 
   // Set default model once GPU memory detection completes
   useEffect(() => {
@@ -46,8 +54,63 @@ function App() {
     }
   }, [availableModels, selectedModel]);
   const [username, setUsername] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("peer");
+  const [activeTab, setActiveTab] = useState<Tab>("agents");
   const [pendingRequest, setPendingRequest] = useState<string | null>(null);
+
+  // --- Task execution ---
+
+  const handleRunTask = useCallback(async (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const taskAgent = agents.find((a) => a.id === task.agentId);
+    if (!taskAgent) {
+      updateTask(taskId, { status: "failed", result: "Agent not found. It may have been deleted." });
+      return;
+    }
+
+    setRunningTaskId(taskId);
+    setTaskStreamingResult("");
+    updateTask(taskId, { status: "running", result: undefined });
+
+    try {
+      // Load model if not ready
+      if (status !== "ready" && status !== "generating") {
+        const modelToLoad = selectedModel || availableModels[0]?.id;
+        if (!modelToLoad) {
+          throw new Error("No models available. WebGPU may not be supported.");
+        }
+        await loadModel(modelToLoad);
+      }
+
+      // Run the task using the agent's full config (system prompt + autonomous mode)
+      const result = await runAgentTask(
+        { systemPrompt: taskAgent.systemPrompt, autonomous: taskAgent.autonomous },
+        task.description,
+        generate,
+        {
+          onChunk: (chunk) => setTaskStreamingResult(chunk),
+          onStep: (step) => {
+            if (step.type === "thinking") {
+              setTaskStreamingResult((prev) => prev + `\n[Thinking] ${step.content}`);
+            } else if (step.type === "tool_call") {
+              setTaskStreamingResult((prev) => prev + `\n[Tool] ${step.content}`);
+            } else if (step.type === "tool_result") {
+              setTaskStreamingResult((prev) => prev + `\n[Result] ${step.content}`);
+            }
+          },
+        }
+      );
+
+      updateTask(taskId, { status: "completed", result });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      updateTask(taskId, { status: "failed", result: `Error: ${errorMsg}` });
+    } finally {
+      setRunningTaskId(null);
+      setTaskStreamingResult("");
+    }
+  }, [tasks, agents, status, selectedModel, availableModels, loadModel, generate, updateTask]);
 
   // --- LLM handlers ---
 
@@ -193,6 +256,7 @@ function App() {
   // --- Derived state ---
 
   const showPendingBanner = pendingRequest && (status !== "ready");
+  const showChatInput = activeTab === "llm" || activeTab === "peer";
   const inputDisabled = activeTab === "llm"
     ? status !== "ready" && status !== "generating"
     : !connected;
@@ -206,6 +270,36 @@ function App() {
       <TabBar activeTab={activeTab} onTabChange={setActiveTab} peerConnected={connected} />
 
       <main className="main">
+        {activeTab === "agents" && (
+          <AgentsPanel
+            agents={agents}
+            onCreate={createAgent}
+            onUpdate={updateAgent}
+            onDelete={deleteAgent}
+            onSaveToFile={saveToFile}
+            onLoadFromFile={loadFromFile}
+          />
+        )}
+
+        {activeTab === "tasks" && (
+          <TasksPanel
+            tasks={tasks}
+            agents={agents}
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            modelStatus={status}
+            loadProgress={loadProgress}
+            activeModel={activeModel}
+            runningTaskId={runningTaskId}
+            streamingResult={taskStreamingResult}
+            onCreate={createTask}
+            onUpdate={updateTask}
+            onDelete={deleteTask}
+            onSelectModel={setSelectedModel}
+            onRunTask={handleRunTask}
+          />
+        )}
+
         {activeTab === "llm" && (
           <LLMChat
             status={status}
@@ -265,14 +359,16 @@ function App() {
         />
       )}
 
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSend={activeTab === "llm" ? handleSendLLM : handleSendPeer}
-        placeholder={activeTab === "llm" ? "Ask the local LLM..." : "Send a message to peers..."}
-        disabled={inputDisabled}
-        sendDisabled={sendDisabled}
-      />
+      {showChatInput && (
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSend={activeTab === "llm" ? handleSendLLM : handleSendPeer}
+          placeholder={activeTab === "llm" ? "Ask the local LLM..." : "Send a message to peers..."}
+          disabled={inputDisabled}
+          sendDisabled={sendDisabled}
+        />
+      )}
     </div>
   );
 }
