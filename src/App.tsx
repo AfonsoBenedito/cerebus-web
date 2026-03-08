@@ -25,7 +25,7 @@ import { TasksPanel } from "./components/Tasks/TasksPanel";
 import "./App.css";
 
 function App() {
-  const { status, loadProgress, error, activeModel, cachedModels, loadModel, unloadModel, deleteFromCache, clearAllCache, refreshCache, generate } = useWebLLM();
+  const { status, loadProgress, error, activeModel, cachedModels, loadModel, unloadModel, deleteFromCache, clearAllCache, generate } = useWebLLM();
   const {
     peerId,
     connected,
