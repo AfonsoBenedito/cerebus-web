@@ -1,5 +1,6 @@
 import { useRef, useEffect } from "react";
 import type { ModelStatus, ChatMessage, ModelOption } from "../../hooks/useWebLLM";
+import { AVAILABLE_MODELS } from "../../hooks/useWebLLM";
 import { ModelSelector } from "../common/ModelSelector";
 import { ProgressBar } from "../common/ProgressBar";
 import { MessageBubble } from "../common/MessageBubble";
@@ -12,12 +13,14 @@ interface LLMChatProps {
   activeModel: string | null;
   selectedModel: string;
   availableModels: ModelOption[];
+  cachedModels: string[];
   chatHistory: ChatMessage[];
   streamingText: string;
   onSelectModel: (modelId: string) => void;
   onLoadModel: () => void;
   onUnloadModel: () => void;
-  onClearCache: () => void;
+  onDeleteFromCache: (modelId: string) => void;
+  onClearAllCache: () => void;
 }
 
 export function LLMChat({
@@ -27,12 +30,14 @@ export function LLMChat({
   activeModel,
   selectedModel,
   availableModels,
+  cachedModels,
   chatHistory,
   streamingText,
   onSelectModel,
   onLoadModel,
   onUnloadModel,
-  onClearCache,
+  onDeleteFromCache,
+  onClearAllCache,
 }: LLMChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +52,8 @@ export function LLMChat({
     return "Load Model";
   };
 
+  const isBusy = status === "loading" || status === "generating";
+
   return (
     <div className="panel">
       <div className="model-controls">
@@ -54,7 +61,7 @@ export function LLMChat({
           value={selectedModel}
           models={availableModels}
           onChange={onSelectModel}
-          disabled={status === "loading" || status === "generating"}
+          disabled={isBusy}
         />
 
         {(status === "idle" || status === "ready" || status === "error") && (
@@ -82,13 +89,46 @@ export function LLMChat({
         {status === "error" && (
           <span className="error">{error}</span>
         )}
-
-        {(status === "idle" || status === "ready" || status === "error") && (
-          <button className="btn cache-btn" onClick={onClearCache} title="Delete all cached model weights from disk">
-            Clear Cache
-          </button>
-        )}
       </div>
+
+      {/* Cached models section */}
+      {cachedModels.length > 0 && (
+        <div className="cached-models">
+          <div className="cached-models-header">
+            <span className="cached-models-title">
+              Downloaded Models ({cachedModels.length})
+            </span>
+            {cachedModels.length > 1 && !isBusy && (
+              <button className="btn danger cache-btn" onClick={onClearAllCache}>
+                Delete All
+              </button>
+            )}
+          </div>
+          <div className="cached-models-list">
+            {cachedModels.map((id) => {
+              const model = AVAILABLE_MODELS.find((m) => m.id === id);
+              const isActive = activeModel === id;
+              return (
+                <div key={id} className={`cached-model-item ${isActive ? "active" : ""}`}>
+                  <span className="cached-model-name">
+                    {model?.label ?? id}
+                  </span>
+                  <span className="cached-model-size">{model?.size ?? ""}</span>
+                  {isActive && <span className="cached-model-badge">Loaded</span>}
+                  <button
+                    className="btn danger cache-btn"
+                    onClick={() => onDeleteFromCache(id)}
+                    disabled={isBusy}
+                    title="Delete from browser cache to free space"
+                  >
+                    Delete
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="messages">
         {chatHistory.map((msg, i) => (

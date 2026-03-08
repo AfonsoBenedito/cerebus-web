@@ -99,7 +99,7 @@ async function readAllJsonFiles<T>(
   subfolder: string
 ): Promise<T[]> {
   try {
-    const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: true });
+    const subDir = await dirHandle.getDirectoryHandle(subfolder);
     const items: T[] = [];
     for await (const entry of subDir.values()) {
       if (entry.kind === "file" && entry.name.endsWith(".json")) {
@@ -276,7 +276,7 @@ export function useFileSystem() {
   const readModelManifest = useCallback(async (): Promise<ModelManifest | null> => {
     if (!rootRef.current) return null;
     try {
-      const modelsDir = await rootRef.current.getDirectoryHandle("models", { create: true });
+      const modelsDir = await rootRef.current.getDirectoryHandle("models");
       const fileHandle = await modelsDir.getFileHandle("manifest.json");
       const file = await fileHandle.getFile();
       const text = await file.text();

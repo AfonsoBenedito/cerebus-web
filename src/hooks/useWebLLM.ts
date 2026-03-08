@@ -58,12 +58,37 @@ export function useGPUMemory() {
   return { gpuMemoryMB, availableModels };
 }
 
+/** Check which models are already downloaded in the browser Cache API */
+export async function getCachedModelIds(): Promise<string[]> {
+  const cached: string[] = [];
+  for (const model of AVAILABLE_MODELS) {
+    try {
+      if (await hasModelInCache(model.id)) {
+        cached.push(model.id);
+      }
+    } catch {
+      // skip
+    }
+  }
+  return cached;
+}
+
 export function useWebLLM() {
   const [status, setStatus] = useState<ModelStatus>("idle");
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [cachedModels, setCachedModels] = useState<string[]>([]);
   const engineRef = useRef<MLCEngine | null>(null);
+
+  // Scan cache on mount
+  useEffect(() => {
+    getCachedModelIds().then(setCachedModels);
+  }, []);
+
+  const refreshCache = useCallback(async () => {
+    setCachedModels(await getCachedModelIds());
+  }, []);
 
   const loadModel = useCallback(async (modelId: string) => {
     try {
@@ -85,6 +110,9 @@ export function useWebLLM() {
 
       engineRef.current = engine;
       setStatus("ready");
+
+      // Update cached models list (model is now in cache)
+      setCachedModels((prev) => prev.includes(modelId) ? prev : [...prev, modelId]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
@@ -136,18 +164,45 @@ export function useWebLLM() {
     setError(null);
   }, []);
 
-  const clearCache = useCallback(async (modelId?: string) => {
-    if (modelId) {
-      await deleteModelAllInfoInCache(modelId);
-    } else {
-      for (const model of AVAILABLE_MODELS) {
-        const inCache = await hasModelInCache(model.id);
-        if (inCache) {
-          await deleteModelAllInfoInCache(model.id);
-        }
-      }
+  const deleteFromCache = useCallback(async (modelId: string) => {
+    // If this model is currently loaded, unload it first
+    if (activeModel === modelId && engineRef.current) {
+      engineRef.current.unload();
+      engineRef.current = null;
+      setStatus("idle");
+      setActiveModel(null);
+      setError(null);
     }
-  }, []);
+    await deleteModelAllInfoInCache(modelId);
+    setCachedModels((prev) => prev.filter((id) => id !== modelId));
+  }, [activeModel]);
 
-  return { status, loadProgress, error, activeModel, loadModel, unloadModel, clearCache, generate };
+  const clearAllCache = useCallback(async () => {
+    if (engineRef.current) {
+      engineRef.current.unload();
+      engineRef.current = null;
+    }
+    setStatus("idle");
+    setActiveModel(null);
+    setError(null);
+
+    for (const modelId of cachedModels) {
+      await deleteModelAllInfoInCache(modelId);
+    }
+    setCachedModels([]);
+  }, [cachedModels]);
+
+  return {
+    status,
+    loadProgress,
+    error,
+    activeModel,
+    cachedModels,
+    loadModel,
+    unloadModel,
+    deleteFromCache,
+    clearAllCache,
+    refreshCache,
+    generate,
+  };
 }

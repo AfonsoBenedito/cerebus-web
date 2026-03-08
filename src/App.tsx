@@ -25,7 +25,7 @@ import { TasksPanel } from "./components/Tasks/TasksPanel";
 import "./App.css";
 
 function App() {
-  const { status, loadProgress, error, activeModel, loadModel, unloadModel, clearCache, generate } = useWebLLM();
+  const { status, loadProgress, error, activeModel, cachedModels, loadModel, unloadModel, deleteFromCache, clearAllCache, refreshCache, generate } = useWebLLM();
   const {
     peerId,
     connected,
@@ -73,9 +73,10 @@ function App() {
   const skipNextTaskWriteRef = useRef(false);
   const prevAgentsRef = useRef(agents);
   const prevTasksRef = useRef(tasks);
+  const initialLoadDoneRef = useRef(false);
 
   // Load everything from FS (agents, tasks, model manifest, peer config)
-  const loadFromFS = useCallback(async () => {
+  const loadFromFS = useCallback(async (autoReload = false) => {
     const [fsAgents, fsTasks, manifest, peerConfig] = await Promise.all([
       fs.readAgents<Agent>(),
       fs.readTasks<Task>(),
@@ -100,12 +101,23 @@ function App() {
     if (peerConfig) {
       agent.setFullConfig(peerConfig);
     }
-  }, [fs.readAgents, fs.readTasks, fs.readModelManifest, fs.readProjectConfig, replaceAllAgents, replaceAllTasks, agent.setFullConfig]);
 
-  // Load from FS when linked
+    initialLoadDoneRef.current = true;
+
+    // Auto-reload last active model if it's still in browser cache
+    if (autoReload && manifest?.activeModel) {
+      const modelId = manifest.activeModel;
+      const isInCache = cachedModels.includes(modelId);
+      if (isInCache) {
+        loadModel(modelId);
+      }
+    }
+  }, [fs.readAgents, fs.readTasks, fs.readModelManifest, fs.readProjectConfig, replaceAllAgents, replaceAllTasks, agent.setFullConfig, cachedModels, loadModel]);
+
+  // Load from FS when linked — auto-reload last model on initial link
   useEffect(() => {
     if (!fs.isLinked) return;
-    loadFromFS();
+    loadFromFS(true);
   }, [fs.isLinked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-read from FS on window focus (external edits)
@@ -121,7 +133,7 @@ function App() {
 
   // Write agents to FS on change
   useEffect(() => {
-    if (!fs.isLinked) return;
+    if (!fs.isLinked || !initialLoadDoneRef.current) return;
     const prev = prevAgentsRef.current;
     prevAgentsRef.current = agents;
 
@@ -145,7 +157,7 @@ function App() {
 
   // Write tasks to FS on change
   useEffect(() => {
-    if (!fs.isLinked) return;
+    if (!fs.isLinked || !initialLoadDoneRef.current) return;
     const prev = prevTasksRef.current;
     prevTasksRef.current = tasks;
 
@@ -169,7 +181,7 @@ function App() {
 
   // Save model manifest when model selection or active model changes
   useEffect(() => {
-    if (!fs.isLinked) return;
+    if (!fs.isLinked || !initialLoadDoneRef.current) return;
     const manifest: ModelManifest = {
       activeModel,
       selectedModel: selectedModel || null,
@@ -180,6 +192,7 @@ function App() {
 
   // Clear all state when unlinking
   const handleUnlink = useCallback(async () => {
+    initialLoadDoneRef.current = false;
     await fs.unlink();
     replaceAllAgents([]);
     replaceAllTasks([]);
@@ -463,15 +476,14 @@ function App() {
             activeModel={activeModel}
             selectedModel={selectedModel}
             availableModels={availableModels}
+            cachedModels={cachedModels}
             chatHistory={chatHistory}
             streamingText={streamingText}
             onSelectModel={setSelectedModel}
             onLoadModel={() => loadModel(selectedModel)}
             onUnloadModel={unloadModel}
-            onClearCache={async () => {
-              unloadModel();
-              await clearCache();
-            }}
+            onDeleteFromCache={deleteFromCache}
+            onClearAllCache={clearAllCache}
           />
         )}
 
